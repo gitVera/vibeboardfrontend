@@ -1,0 +1,39 @@
+---
+description: Product and engineering standards for AI task board
+alwaysApply: true
+---
+
+# Vibeboard Product Rule (Global)
+
+## Stack and architecture
+- Frontend: React + TypeScript.
+- Styling: Tailwind CSS utility-first approach; avoid ad-hoc inline styles.
+- Backend and DB: Supabase (Auth, Postgres, Row Level Security, Edge Functions when needed).
+- Keep strict type safety across frontend, API layer, and Supabase payloads.
+
+## Core product behavior
+- Product is a task board like Trello/Jira with AI features.
+- Support global task creation and decomposition: AI splits big goals into actionable subtasks.
+- Each subtask must include: owner, status, priority, estimate, deadline, and parent task link.
+- Preserve task hierarchy (epic -> task -> subtask) for roadmap and reporting.
+
+## Roadmap requirements
+- Roadmap must be generated from task graph and deadlines, not hardcoded static data.
+- Respect dependencies between tasks when building timeline views.
+- Any roadmap UI change must keep backward compatibility with existing task relations.
+
+## Telegram integration
+- Allow task creation via Telegram bot/messages.
+- Validate and normalize incoming Telegram payload before creating records in Supabase.
+- Store Telegram linkage metadata (chat/user identifiers) separately from business task data.
+
+## Overdue notifications
+- Send Telegram notifications when a task deadline is exceeded.
+- For management notifications, include per-user summary: overdue count, nearest overdue task, total delay.
+- Notifications must be idempotent (no duplicate spam for the same overdue event window).
+
+## Implementation quality
+- Prefer small, reusable React components and typed hooks.
+- Add/keep tests for AI decomposition logic, overdue summary logic, and Telegram webhook handlers.
+- Never weaken Supabase RLS policies to "make it work"; fix access paths correctly.
+
