@@ -89,6 +89,8 @@ export const supabase = createClient(
 
 ## Настройка окружения
 
+Для локального запуска у нового разработчика: скопируйте `.env.example` в `.env.local` и подставьте ключи из Supabase Dashboard.
+
 1. Скопируйте `.env.example` → `.env.local`
 2. Заполните переменные из Supabase Dashboard → Settings → API:
 
