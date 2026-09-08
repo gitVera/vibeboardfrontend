@@ -92,8 +92,24 @@ import { createClient } from '@supabase/supabase-js'
 export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      flowType: 'pkce',
+      detectSessionInUrl: false,
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  },
 )
 ```
+
+## Роуты приложения
+
+- `/` — лендинг
+- `/boards` — страница доски с колонками и задачами
+- `/auth/callback` — служебный роут завершения Google OAuth (`exchangeCodeForSession`)
+
+После успешного логина (email/password или Google OAuth) выполняется переход на `/boards`.
 
 ## Настройка окружения
 
@@ -122,7 +138,7 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<publishable-or-anon-key>
 - `http://localhost:5173/auth/callback`
 - `https://<your-production-domain>/auth/callback`
 
-Frontend после OAuth возвращается на `/auth/callback`, где вызывается `exchangeCodeForSession`, затем URL очищается до `/`.
+Frontend после OAuth возвращается на `/auth/callback`, где вызывается `exchangeCodeForSession`, затем выполняется переход на `/boards`.
 
 ### Поток Google OAuth
 
@@ -142,7 +158,7 @@ sequenceDiagram
   Supabase->>AuthCallbackPage: redirect to /auth/callback?code=...
   AuthCallbackPage->>Supabase: exchangeCodeForSession
   Supabase->>App: onAuthStateChange(session)
-  AuthCallbackPage->>App: replaceState('/')
+  AuthCallbackPage->>App: navigate('/boards')
   App->>User: boards or role selection modal
 ```
 
@@ -175,12 +191,12 @@ sequenceDiagram
 
 - таблица `public.profiles` и RLS-политики
 - восстановление пароля
-- защищённые роуты / redirect после login
+- полноценные ACL/permission-политики внутри boards
 
 ## Ручная проверка
 
 1. `npm run dev`
 2. **Регистрация:** заполнить форму → аккаунт в Supabase Auth, metadata с `name` и `role`
-3. **Вход email/password:** в хедере имя/email и «Выйти»
+3. **Вход email/password:** после успеха переход на `/boards`, в хедере имя/email и «Выйти»
 4. **Вход Google:** редирект в Google → возврат на `/auth/callback` → сессия → boards (или выбор роли, если role пустая)
 5. **Выход:** «Выйти» → снова «Войти» / «Регистрация»

@@ -4,9 +4,10 @@ import { supabase } from '../lib/supabase'
 
 type AuthCallbackPageProps = {
   onComplete: () => void
+  onReturnHome: () => void
 }
 
-export function AuthCallbackPage({ onComplete }: AuthCallbackPageProps) {
+export function AuthCallbackPage({ onComplete, onReturnHome }: AuthCallbackPageProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(true)
 
@@ -34,7 +35,6 @@ export function AuthCallbackPage({ onComplete }: AuthCallbackPageProps) {
           return
         }
 
-        window.history.replaceState({}, '', '/')
         onComplete()
       } catch (error) {
         if (isMounted) {
@@ -53,11 +53,6 @@ export function AuthCallbackPage({ onComplete }: AuthCallbackPageProps) {
     }
   }, [onComplete])
 
-  const handleReturnHome = () => {
-    window.history.replaceState({}, '', '/')
-    onComplete()
-  }
-
   if (isProcessing) {
     return (
       <div className="mx-auto flex min-h-[50vh] max-w-md flex-col items-center justify-center px-6 text-center">
@@ -74,7 +69,7 @@ export function AuthCallbackPage({ onComplete }: AuthCallbackPageProps) {
       </p>
       <button
         type="button"
-        onClick={handleReturnHome}
+        onClick={onReturnHome}
         className="mt-6 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
       >
         Вернуться на главную

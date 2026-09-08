@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AuthModal } from './components/AuthModal'
 import { RoleSelectionModal } from './components/RoleSelectionModal'
 import type { ItTeamRole } from './constants/roles'
-import { isAuthCallbackPath } from './lib/auth'
+import { AUTH_CALLBACK_PATH } from './lib/auth'
 import { supabase } from './lib/supabase'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import { BoardsPage } from './pages/BoardsPage'
@@ -29,8 +30,13 @@ function hasUserRole(session: Session): boolean {
   return typeof role === 'string' && role.trim().length > 0
 }
 
+function isBoardsPath(pathname: string): boolean {
+  return pathname === '/boards' || pathname.startsWith('/boards/')
+}
+
 function App() {
-  const [isAuthCallbackRoute, setIsAuthCallbackRoute] = useState(() => isAuthCallbackPath())
+  const location = useLocation()
+  const navigate = useNavigate()
   const [isAuthModalOpen, setAuthModalOpen] = useState(false)
   const [authInitialTab, setAuthInitialTab] = useState<AuthTab>('login')
   const [session, setSession] = useState<Session | null>(null)
@@ -47,6 +53,9 @@ function App() {
       if (isMounted) {
         setSession(currentSession)
         setRoleModalOpen(Boolean(currentSession && !hasUserRole(currentSession)))
+        if (currentSession && !isBoardsPath(location.pathname) && location.pathname !== AUTH_CALLBACK_PATH) {
+          navigate('/boards', { replace: true })
+        }
       }
     })
 
@@ -57,6 +66,9 @@ function App() {
 
       if (nextSession) {
         setAuthModalOpen(false)
+        if (!isBoardsPath(location.pathname) && location.pathname !== AUTH_CALLBACK_PATH) {
+          navigate('/boards')
+        }
       }
 
       if (nextSession && !hasUserRole(nextSession)) {
@@ -72,7 +84,7 @@ function App() {
       isMounted = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [location.pathname, navigate])
 
   const openAuthModal = (tab: AuthTab) => {
     setAuthInitialTab(tab)
@@ -80,8 +92,12 @@ function App() {
   }
 
   const handleAuthCallbackComplete = useCallback(() => {
-    setIsAuthCallbackRoute(false)
-  }, [])
+    navigate('/boards', { replace: true })
+  }, [navigate])
+
+  const handleAuthCallbackReturnHome = useCallback(() => {
+    navigate('/', { replace: true })
+  }, [navigate])
 
   const handleRoleSubmit = async (role: ItTeamRole) => {
     if (!session) {
@@ -121,7 +137,10 @@ function App() {
 
     if (error) {
       setSignOutError(error.message)
+      return
     }
+
+    navigate('/', { replace: true })
   }
 
   const isAuthenticated = session !== null
@@ -207,16 +226,36 @@ function App() {
       </header>
 
       <main className={isAuthenticated ? '' : 'mx-auto max-w-6xl px-6 py-16'}>
-        {isAuthCallbackRoute ? (
-          <AuthCallbackPage onComplete={handleAuthCallbackComplete} />
-        ) : isAuthenticated ? (
-          <BoardsPage userName={displayName} userRole={userRole} />
-        ) : (
-          <LandingPage
-            onOpenLogin={() => openAuthModal('login')}
-            onOpenRegister={() => openAuthModal('register')}
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <LandingPage
+                onOpenLogin={() => openAuthModal('login')}
+                onOpenRegister={() => openAuthModal('register')}
+              />
+            }
           />
-        )}
+          <Route
+            path="/boards/*"
+            element={
+              <BoardsPage
+                userName={isAuthenticated ? displayName : 'Гость'}
+                userRole={isAuthenticated ? userRole : undefined}
+              />
+            }
+          />
+          <Route
+            path={AUTH_CALLBACK_PATH}
+            element={
+              <AuthCallbackPage
+                onComplete={handleAuthCallbackComplete}
+                onReturnHome={handleAuthCallbackReturnHome}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to={isAuthenticated ? '/boards' : '/'} replace />} />
+        </Routes>
       </main>
 
       <footer className="border-t border-white/10 py-8 text-center text-sm text-slate-500">
