@@ -2,6 +2,8 @@
 
 Документация по реализованному auth-потоку во frontend.
 
+Связанная документация по доскам и задачам: [`docs/boards.md`](./boards.md)
+
 ## Обзор
 
 - **Backend:** Supabase Auth (email + password + Google OAuth)
