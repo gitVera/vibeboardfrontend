@@ -4,8 +4,8 @@
 
 ## Обзор
 
-- **Backend:** Supabase Auth (email + password)
-- **Профиль:** `name` и `role` сохраняются в `auth.users.user_metadata` при регистрации
+- **Backend:** Supabase Auth (email + password + Google OAuth)
+- **Профиль:** `name` и `role` сохраняются в `auth.users.user_metadata`; для Google роль выбирается после первого входа
 - **UI:** модальное окно с вкладками «Вход» / «Регистрация», реактивный хедер по сессии
 
 ## Компоненты
@@ -16,7 +16,7 @@
 
 | Вкладка | Поля | API |
 |---------|------|-----|
-| Вход | email, password | `supabase.auth.signInWithPassword` |
+| Вход | email, password + Google OAuth | `supabase.auth.signInWithPassword`, `supabase.auth.signInWithOAuth` |
 | Регистрация | имя, email, password, подтверждение пароля, роль | `supabase.auth.signUp` |
 
 **Роли при регистрации (IT-команда):**
@@ -74,6 +74,14 @@ options: {
 - подписка: `supabase.auth.onAuthStateChange`
 - выход: `supabase.auth.signOut()`
 
+### `RoleSelectionModal`
+
+Файл: [`src/components/RoleSelectionModal.tsx`](../src/components/RoleSelectionModal.tsx)
+
+- показывается только для авторизованного пользователя без `user_metadata.role`
+- блокирует дальнейший сценарий до выбора роли или выхода
+- сохраняет роль через `supabase.auth.updateUser`
+
 ## Supabase client
 
 Файл: [`src/lib/supabase.ts`](../src/lib/supabase.ts)
@@ -100,6 +108,43 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<publishable-or-anon-key>
 ```
 
 `.env.local` не коммитится (см. `.gitignore` → `*.local`).
+
+## Google OAuth
+
+### Redirect URLs
+
+**Google Cloud OAuth client (Authorized redirect URI):**
+
+- `https://ecwsbjkxiwsoqbihsizo.supabase.co/auth/v1/callback`
+
+**Supabase Dashboard → Authentication → URL Configuration → Redirect URLs:**
+
+- `http://localhost:5173/auth/callback`
+- `https://<your-production-domain>/auth/callback`
+
+Frontend после OAuth возвращается на `/auth/callback`, где вызывается `exchangeCodeForSession`, затем URL очищается до `/`.
+
+### Поток Google OAuth
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant AuthModal
+  participant Google
+  participant Supabase
+  participant AuthCallbackPage
+  participant App
+
+  User->>AuthModal: Continue with Google
+  AuthModal->>Supabase: signInWithOAuth(redirectTo=/auth/callback)
+  Supabase->>Google: OAuth consent
+  Google->>Supabase: callback to /auth/v1/callback
+  Supabase->>AuthCallbackPage: redirect to /auth/callback?code=...
+  AuthCallbackPage->>Supabase: exchangeCodeForSession
+  Supabase->>App: onAuthStateChange(session)
+  AuthCallbackPage->>App: replaceState('/')
+  App->>User: boards or role selection modal
+```
 
 ## Поток данных
 
@@ -130,12 +175,12 @@ sequenceDiagram
 
 - таблица `public.profiles` и RLS-политики
 - восстановление пароля
-- OAuth-провайдеры
 - защищённые роуты / redirect после login
 
 ## Ручная проверка
 
 1. `npm run dev`
 2. **Регистрация:** заполнить форму → аккаунт в Supabase Auth, metadata с `name` и `role`
-3. **Вход:** email + password → в хедере имя/email и «Выйти»
-4. **Выход:** «Выйти» → снова «Войти» / «Регистрация»
+3. **Вход email/password:** в хедере имя/email и «Выйти»
+4. **Вход Google:** редирект в Google → возврат на `/auth/callback` → сессия → boards (или выбор роли, если role пустая)
+5. **Выход:** «Выйти» → снова «Войти» / «Регистрация»

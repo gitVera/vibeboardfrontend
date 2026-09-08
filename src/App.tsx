@@ -1,7 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { AuthModal } from './components/AuthModal'
+import { RoleSelectionModal } from './components/RoleSelectionModal'
+import type { ItTeamRole } from './constants/roles'
+import { isAuthCallbackPath } from './lib/auth'
 import { supabase } from './lib/supabase'
+import { AuthCallbackPage } from './pages/AuthCallbackPage'
+import { BoardsPage } from './pages/BoardsPage'
+import { LandingPage } from './pages/LandingPage'
 
 type AuthTab = 'login' | 'register'
 
@@ -18,12 +24,21 @@ function getUserInitial(displayName: string): string {
   return displayName.charAt(0).toUpperCase()
 }
 
+function hasUserRole(session: Session): boolean {
+  const role = session.user.user_metadata?.role
+  return typeof role === 'string' && role.trim().length > 0
+}
+
 function App() {
+  const [isAuthCallbackRoute, setIsAuthCallbackRoute] = useState(() => isAuthCallbackPath())
   const [isAuthModalOpen, setAuthModalOpen] = useState(false)
   const [authInitialTab, setAuthInitialTab] = useState<AuthTab>('login')
   const [session, setSession] = useState<Session | null>(null)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [signOutError, setSignOutError] = useState<string | null>(null)
+  const [isRoleModalOpen, setRoleModalOpen] = useState(false)
+  const [isRoleSaving, setRoleSaving] = useState(false)
+  const [roleError, setRoleError] = useState<string | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -31,6 +46,7 @@ function App() {
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
       if (isMounted) {
         setSession(currentSession)
+        setRoleModalOpen(Boolean(currentSession && !hasUserRole(currentSession)))
       }
     })
 
@@ -38,6 +54,18 @@ function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession)
+
+      if (nextSession) {
+        setAuthModalOpen(false)
+      }
+
+      if (nextSession && !hasUserRole(nextSession)) {
+        setRoleModalOpen(true)
+        return
+      }
+
+      setRoleModalOpen(false)
+      setRoleError(null)
     })
 
     return () => {
@@ -49,6 +77,38 @@ function App() {
   const openAuthModal = (tab: AuthTab) => {
     setAuthInitialTab(tab)
     setAuthModalOpen(true)
+  }
+
+  const handleAuthCallbackComplete = useCallback(() => {
+    setIsAuthCallbackRoute(false)
+  }, [])
+
+  const handleRoleSubmit = async (role: ItTeamRole) => {
+    if (!session) {
+      return
+    }
+
+    setRoleSaving(true)
+    setRoleError(null)
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: {
+          ...session.user.user_metadata,
+          role,
+        },
+      })
+
+      if (error) {
+        setRoleError(error.message)
+        return
+      }
+
+      setRoleModalOpen(false)
+    } catch (error) {
+      setRoleError(error instanceof Error ? error.message : 'Не удалось сохранить роль.')
+    } finally {
+      setRoleSaving(false)
+    }
   }
 
   const handleSignOut = async () => {
@@ -67,6 +127,10 @@ function App() {
   const isAuthenticated = session !== null
   const displayName = session ? getUserDisplayName(session) : ''
   const userInitial = displayName ? getUserInitial(displayName) : ''
+  const userRole =
+    session && typeof session.user.user_metadata?.role === 'string'
+      ? session.user.user_metadata.role
+      : undefined
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950">
@@ -79,12 +143,18 @@ function App() {
             <span className="text-lg font-semibold tracking-tight">Vibeboard</span>
           </div>
           <nav className="hidden items-center gap-6 text-sm text-slate-300 sm:flex">
-            <a href="#features" className="transition hover:text-white">
-              Возможности
-            </a>
-            <a href="#start" className="transition hover:text-white">
-              Начать
-            </a>
+            {isAuthenticated ? (
+              <span className="font-medium text-white">Boards</span>
+            ) : (
+              <>
+                <a href="#features" className="transition hover:text-white">
+                  Возможности
+                </a>
+                <a href="#start" className="transition hover:text-white">
+                  Начать
+                </a>
+              </>
+            )}
           </nav>
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-2">
@@ -136,60 +206,17 @@ function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-16">
-        <section className="flex flex-col items-center text-center">
-          <span className="mb-4 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-500/10 px-4 py-1 text-sm text-indigo-300">
-            Task board с AI
-          </span>
-          <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
-            Управляйте задачами и roadmap в одном месте
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-slate-300">
-            Vibeboard помогает разбивать большие цели на подзадачи, отслеживать дедлайны
-            и получать уведомления в Telegram — всё с поддержкой AI.
-          </p>
-          <div id="start" className="mt-10 flex flex-wrap items-center justify-center gap-4">
-            <button
-              type="button"
-              onClick={() => openAuthModal('register')}
-              className="rounded-xl bg-indigo-500 px-6 py-3 font-medium text-white shadow-lg shadow-indigo-500/25 transition hover:bg-indigo-400"
-            >
-              Создать первую задачу
-            </button>
-            <button
-              type="button"
-              onClick={() => openAuthModal('login')}
-              className="rounded-xl border border-white/15 bg-white/5 px-6 py-3 font-medium text-white transition hover:bg-white/10"
-            >
-              Посмотреть roadmap
-            </button>
-          </div>
-        </section>
-
-        <section id="features" className="mt-24 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {[
-            {
-              title: 'AI-декомпозиция',
-              description: 'Разбивайте эпики на задачи и подзадачи с владельцами, приоритетами и оценками.',
-            },
-            {
-              title: 'Roadmap из данных',
-              description: 'Таймлайн строится из графа задач и дедлайнов, а не из статичных заглушек.',
-            },
-            {
-              title: 'Telegram-интеграция',
-              description: 'Создавайте задачи из чата и получайте уведомления о просрочках.',
-            },
-          ].map((feature) => (
-            <article
-              key={feature.title}
-              className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
-            >
-              <h2 className="text-lg font-semibold text-white">{feature.title}</h2>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">{feature.description}</p>
-            </article>
-          ))}
-        </section>
+      <main className={isAuthenticated ? '' : 'mx-auto max-w-6xl px-6 py-16'}>
+        {isAuthCallbackRoute ? (
+          <AuthCallbackPage onComplete={handleAuthCallbackComplete} />
+        ) : isAuthenticated ? (
+          <BoardsPage userName={displayName} userRole={userRole} />
+        ) : (
+          <LandingPage
+            onOpenLogin={() => openAuthModal('login')}
+            onOpenRegister={() => openAuthModal('register')}
+          />
+        )}
       </main>
 
       <footer className="border-t border-white/10 py-8 text-center text-sm text-slate-500">
@@ -197,6 +224,13 @@ function App() {
       </footer>
 
       <AuthModal open={isAuthModalOpen} onClose={() => setAuthModalOpen(false)} initialTab={authInitialTab} />
+      <RoleSelectionModal
+        open={isRoleModalOpen}
+        isSubmitting={isRoleSaving || isSigningOut}
+        errorMessage={roleError}
+        onSubmit={handleRoleSubmit}
+        onSignOut={handleSignOut}
+      />
     </div>
   )
 }

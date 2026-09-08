@@ -1,20 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react'
+import { IT_TEAM_ROLES, type ItTeamRole } from '../constants/roles'
+import { getAuthCallbackUrl } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 
 type AuthTab = 'login' | 'register'
-
-type ItTeamRole = (typeof IT_TEAM_ROLES)[number]
-
-const IT_TEAM_ROLES = [
-  'Frontend Developer',
-  'Backend Developer',
-  'Fullstack Developer',
-  'QA Engineer',
-  'DevOps Engineer',
-  'Product Manager',
-  'UI/UX Designer',
-  'Data Analyst',
-] as const
 
 const inputClassName =
   'mt-1 w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-2.5 text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60'
@@ -83,6 +72,32 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
   const switchTab = (tab: AuthTab) => {
     setActiveTab(tab)
     resetFeedback()
+  }
+
+  const handleGoogleSignIn = async () => {
+    resetFeedback()
+    setIsSubmitting(true)
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: getAuthCallbackUrl(),
+        },
+      })
+
+      if (error) {
+        setErrorMessage(`Не удалось начать вход через Google: ${error.message}`)
+        setIsSubmitting(false)
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? `Не удалось начать вход через Google: ${error.message}`
+          : 'Не удалось начать вход через Google.',
+      )
+      setIsSubmitting(false)
+    }
   }
 
   const handleLoginSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -233,6 +248,21 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
             {successMessage}
           </p>
         ) : null}
+
+        <button
+          type="button"
+          onClick={() => void handleGoogleSignIn()}
+          disabled={isSubmitting}
+          className="mb-4 w-full rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isSubmitting ? 'Переходим в Google...' : 'Продолжить через Google'}
+        </button>
+
+        <div className="mb-4 flex items-center gap-3 text-xs text-slate-400">
+          <span className="h-px flex-1 bg-white/10" />
+          <span>или</span>
+          <span className="h-px flex-1 bg-white/10" />
+        </div>
 
         {activeTab === 'login' ? (
           <form className="space-y-4" onSubmit={handleLoginSubmit}>

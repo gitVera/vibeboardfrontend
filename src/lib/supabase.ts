@@ -9,4 +9,11 @@ if (!supabaseUrl || !supabasePublishableKey) {
   )
 }
 
-export const supabase = createClient(supabaseUrl, supabasePublishableKey)
+export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
+  auth: {
+    flowType: 'pkce',
+    detectSessionInUrl: false,
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+})
