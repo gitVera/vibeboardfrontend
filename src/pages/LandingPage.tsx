@@ -7,13 +7,13 @@ export function LandingPage({ onOpenLogin, onOpenRegister }: LandingPageProps) {
   return (
     <>
       <section className="flex flex-col items-center text-center">
-        <span className="mb-4 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-500/10 px-4 py-1 text-sm text-indigo-300">
+        <span className="mb-4 inline-flex items-center rounded-full border border-pink-300 bg-pink-100 px-4 py-1 text-sm text-pink-700">
           Task board с AI
         </span>
-        <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
+        <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
           Управляйте задачами и roadmap в одном месте
         </h1>
-        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-slate-300">
+        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-slate-600">
           Vibeboard помогает разбивать большие цели на подзадачи, отслеживать дедлайны
           и получать уведомления в Telegram — всё с поддержкой AI.
         </p>
@@ -21,14 +21,14 @@ export function LandingPage({ onOpenLogin, onOpenRegister }: LandingPageProps) {
           <button
             type="button"
             onClick={onOpenRegister}
-            className="rounded-xl bg-indigo-500 px-6 py-3 font-medium text-white shadow-lg shadow-indigo-500/25 transition hover:bg-indigo-400"
+            className="rounded-xl bg-gradient-to-r from-fuchsia-500 to-pink-500 px-6 py-3 font-medium text-white shadow-lg shadow-pink-500/25 transition hover:from-fuchsia-400 hover:to-pink-400"
           >
             Создать первую задачу
           </button>
           <button
             type="button"
             onClick={onOpenLogin}
-            className="rounded-xl border border-white/15 bg-white/5 px-6 py-3 font-medium text-white transition hover:bg-white/10"
+            className="rounded-xl border border-rose-200 bg-white/90 px-6 py-3 font-medium text-slate-700 transition hover:bg-rose-100"
           >
             Посмотреть roadmap
           </button>
@@ -52,10 +52,10 @@ export function LandingPage({ onOpenLogin, onOpenRegister }: LandingPageProps) {
         ].map((feature) => (
           <article
             key={feature.title}
-            className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
+            className="rounded-2xl border border-rose-200/80 bg-white/85 p-6 shadow-sm backdrop-blur-sm"
           >
-            <h2 className="text-lg font-semibold text-white">{feature.title}</h2>
-            <p className="mt-2 text-sm leading-relaxed text-slate-400">{feature.description}</p>
+            <h2 className="text-lg font-semibold text-slate-900">{feature.title}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">{feature.description}</p>
           </article>
         ))}
       </section>

@@ -56,21 +56,21 @@ export function AuthCallbackPage({ onComplete, onReturnHome }: AuthCallbackPageP
   if (isProcessing) {
     return (
       <div className="mx-auto flex min-h-[50vh] max-w-md flex-col items-center justify-center px-6 text-center">
-        <p className="text-lg font-medium text-white">Завершаем вход через Google...</p>
-        <p className="mt-2 text-sm text-slate-400">Пожалуйста, подождите несколько секунд.</p>
+        <p className="text-lg font-medium text-slate-900">Завершаем вход через Google...</p>
+        <p className="mt-2 text-sm text-slate-600">Пожалуйста, подождите несколько секунд.</p>
       </div>
     )
   }
 
   return (
     <div className="mx-auto flex min-h-[50vh] max-w-md flex-col items-center justify-center px-6 text-center">
-      <p className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+      <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
         {errorMessage ?? 'Не удалось завершить вход через Google.'}
       </p>
       <button
         type="button"
         onClick={onReturnHome}
-        className="mt-6 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
+        className="mt-6 rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-rose-100"
       >
         Вернуться на главную
       </button>

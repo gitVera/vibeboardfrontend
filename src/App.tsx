@@ -152,24 +152,24 @@ function App() {
       : undefined
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950">
-      <header className="border-b border-white/10 bg-slate-950/50 backdrop-blur-sm">
+    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-pink-50 to-violet-100 text-slate-800">
+      <header className="border-b border-rose-200/70 bg-white/75 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500 font-bold text-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-fuchsia-500 to-pink-500 font-bold text-white shadow-sm">
               V
             </div>
-            <span className="text-lg font-semibold tracking-tight">Vibeboard</span>
+            <span className="text-lg font-semibold tracking-tight text-slate-900">Vibeboard</span>
           </div>
-          <nav className="hidden items-center gap-6 text-sm text-slate-300 sm:flex">
+          <nav className="hidden items-center gap-6 text-sm text-slate-600 sm:flex">
             {isAuthenticated ? (
-              <span className="font-medium text-white">Boards</span>
+              <span className="font-medium text-slate-900">Boards</span>
             ) : (
               <>
-                <a href="#features" className="transition hover:text-white">
+                <a href="#features" className="transition hover:text-pink-600">
                   Возможности
                 </a>
-                <a href="#start" className="transition hover:text-white">
+                <a href="#start" className="transition hover:text-pink-600">
                   Начать
                 </a>
               </>
@@ -179,14 +179,14 @@ function App() {
             <div className="flex items-center gap-2">
               {isAuthenticated ? (
                 <>
-                  <div className="flex min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                  <div className="flex min-w-0 items-center gap-2 rounded-lg border border-rose-200 bg-white/90 px-3 py-2">
                     <div
                       aria-hidden="true"
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-sm font-semibold text-white"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 to-pink-500 text-sm font-semibold text-white"
                     >
                       {userInitial}
                     </div>
-                    <span className="max-w-[10rem] truncate text-sm text-white sm:max-w-[14rem]">
+                    <span className="max-w-[10rem] truncate text-sm text-slate-800 sm:max-w-[14rem]">
                       {displayName}
                     </span>
                   </div>
@@ -194,7 +194,7 @@ function App() {
                     type="button"
                     onClick={handleSignOut}
                     disabled={isSigningOut}
-                    className="rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg border border-rose-200 bg-white/90 px-4 py-2 text-sm text-slate-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isSigningOut ? 'Выходим...' : 'Выйти'}
                   </button>
@@ -204,23 +204,21 @@ function App() {
                   <button
                     type="button"
                     onClick={() => openAuthModal('login')}
-                    className="rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm text-white transition hover:bg-white/10"
+                    className="rounded-lg border border-rose-200 bg-white/90 px-4 py-2 text-sm text-slate-700 transition hover:bg-rose-100"
                   >
                     Войти
                   </button>
                   <button
                     type="button"
                     onClick={() => openAuthModal('register')}
-                    className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-400"
+                    className="rounded-lg bg-gradient-to-r from-fuchsia-500 to-pink-500 px-4 py-2 text-sm font-medium text-white transition hover:from-fuchsia-400 hover:to-pink-400"
                   >
                     Регистрация
                   </button>
                 </>
               )}
             </div>
-            {signOutError ? (
-              <p className="max-w-xs text-right text-xs text-red-300">{signOutError}</p>
-            ) : null}
+            {signOutError ? <p className="max-w-xs text-right text-xs text-red-500">{signOutError}</p> : null}
           </div>
         </div>
       </header>
@@ -258,7 +256,7 @@ function App() {
         </Routes>
       </main>
 
-      <footer className="border-t border-white/10 py-8 text-center text-sm text-slate-500">
+      <footer className="border-t border-rose-200/70 py-8 text-center text-sm text-slate-500">
         Vibeboard — стартовый скелет приложения
       </footer>
 

@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 type AuthTab = 'login' | 'register'
 
 const inputClassName =
-  'mt-1 w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-2.5 text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60'
+  'mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 placeholder:text-slate-400 focus:border-pink-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60'
 
 type AuthModalProps = {
   open: boolean
@@ -193,34 +193,34 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
       role="dialog"
       aria-modal="true"
       aria-label="Форма входа и регистрации"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 px-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/95 p-6 shadow-2xl shadow-indigo-900/30"
+        className="w-full max-w-md rounded-2xl border border-rose-200 bg-rose-50/95 p-6 shadow-2xl shadow-pink-200/50"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-white">
+          <h2 className="text-xl font-semibold text-slate-900">
             {activeTab === 'login' ? 'Вход в Vibeboard' : 'Создание аккаунта'}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Закрыть окно"
-            className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white"
+            className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-rose-100 hover:text-slate-800"
           >
             Закрыть
           </button>
         </div>
 
-        <div className="mb-6 grid grid-cols-2 rounded-xl border border-white/10 bg-white/5 p-1 text-sm">
+        <div className="mb-6 grid grid-cols-2 rounded-xl border border-rose-200 bg-white p-1 text-sm">
           <button
             type="button"
             onClick={() => switchTab('login')}
             disabled={isSubmitting}
             className={`rounded-lg px-3 py-2 font-medium transition ${
-              activeTab === 'login' ? 'bg-indigo-500 text-white' : 'text-slate-300 hover:text-white'
+              activeTab === 'login' ? 'bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white' : 'text-slate-600 hover:text-pink-700'
             }`}
           >
             Вход
@@ -230,7 +230,7 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
             onClick={() => switchTab('register')}
             disabled={isSubmitting}
             className={`rounded-lg px-3 py-2 font-medium transition ${
-              activeTab === 'register' ? 'bg-indigo-500 text-white' : 'text-slate-300 hover:text-white'
+              activeTab === 'register' ? 'bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white' : 'text-slate-600 hover:text-pink-700'
             }`}
           >
             Регистрация
@@ -238,13 +238,13 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
         </div>
 
         {errorMessage ? (
-          <p className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {errorMessage}
           </p>
         ) : null}
 
         {successMessage ? (
-          <p className="mb-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+          <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             {successMessage}
           </p>
         ) : null}
@@ -253,20 +253,20 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
           type="button"
           onClick={() => void handleGoogleSignIn()}
           disabled={isSubmitting}
-          className="mb-4 w-full rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mb-4 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 font-medium text-slate-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isSubmitting ? 'Переходим в Google...' : 'Продолжить через Google'}
         </button>
 
-        <div className="mb-4 flex items-center gap-3 text-xs text-slate-400">
-          <span className="h-px flex-1 bg-white/10" />
+        <div className="mb-4 flex items-center gap-3 text-xs text-slate-500">
+          <span className="h-px flex-1 bg-rose-200" />
           <span>или</span>
-          <span className="h-px flex-1 bg-white/10" />
+          <span className="h-px flex-1 bg-rose-200" />
         </div>
 
         {activeTab === 'login' ? (
           <form className="space-y-4" onSubmit={handleLoginSubmit}>
-            <label className="block text-sm text-slate-300">
+            <label className="block text-sm text-slate-700">
               Email
               <input
                 type="email"
@@ -278,7 +278,7 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
                 className={inputClassName}
               />
             </label>
-            <label className="block text-sm text-slate-300">
+            <label className="block text-sm text-slate-700">
               Пароль
               <input
                 type="password"
@@ -293,14 +293,14 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full rounded-xl bg-indigo-500 px-4 py-2.5 font-medium text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-xl bg-gradient-to-r from-fuchsia-500 to-pink-500 px-4 py-2.5 font-medium text-white transition hover:from-fuchsia-400 hover:to-pink-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting ? 'Входим...' : 'Войти'}
             </button>
           </form>
         ) : (
           <form className="space-y-4" onSubmit={handleRegisterSubmit}>
-            <label className="block text-sm text-slate-300">
+            <label className="block text-sm text-slate-700">
               Имя
               <input
                 type="text"
@@ -312,7 +312,7 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
                 className={inputClassName}
               />
             </label>
-            <label className="block text-sm text-slate-300">
+            <label className="block text-sm text-slate-700">
               Email
               <input
                 type="email"
@@ -324,7 +324,7 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
                 className={inputClassName}
               />
             </label>
-            <label className="block text-sm text-slate-300">
+            <label className="block text-sm text-slate-700">
               Пароль
               <input
                 type="password"
@@ -337,7 +337,7 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
                 className={inputClassName}
               />
             </label>
-            <label className="block text-sm text-slate-300">
+            <label className="block text-sm text-slate-700">
               Подтверждение пароля
               <input
                 type="password"
@@ -351,7 +351,7 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
                 className={inputClassName}
               />
             </label>
-            <label className="block text-sm text-slate-300">
+            <label className="block text-sm text-slate-700">
               Роль
               <select
                 value={registerForm.role}
@@ -369,7 +369,7 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
                   Выберите роль
                 </option>
                 {IT_TEAM_ROLES.map((role) => (
-                  <option key={role} value={role} className="bg-slate-900 text-white">
+                  <option key={role} value={role} className="bg-white text-slate-800">
                     {role}
                   </option>
                 ))}
@@ -378,7 +378,7 @@ export function AuthModal({ open, onClose, initialTab = 'login' }: AuthModalProp
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full rounded-xl bg-indigo-500 px-4 py-2.5 font-medium text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-xl bg-gradient-to-r from-fuchsia-500 to-pink-500 px-4 py-2.5 font-medium text-white transition hover:from-fuchsia-400 hover:to-pink-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting ? 'Создаем аккаунт...' : 'Создать аккаунт'}
             </button>
