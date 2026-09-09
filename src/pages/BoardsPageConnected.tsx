@@ -1,17 +1,31 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { IT_TEAM_ROLES } from '../constants/roles'
 import {
+  addBoardMember,
   createBoard,
   createTask,
   deleteBoard,
   deleteTask,
+  listBoardMembers,
   listBoards,
   listTasks,
+  removeBoardMember,
   updateBoard,
   updateTask,
 } from '../lib/boardsApi'
+import { listProfiles } from '../lib/profilesApi'
 import { supabase } from '../lib/supabase'
-import { BOARD_COLUMNS, type Board, type BoardColumn, type Task, type TaskPriority, type TaskStatus } from '../types/boards'
+import {
+  BOARD_COLUMNS,
+  type Board,
+  type BoardColumn,
+  type BoardMember,
+  type Profile,
+  type Task,
+  type TaskPriority,
+  type TaskStatus,
+} from '../types/boards'
 
 type BoardsPageProps = {
   userName: string
@@ -58,6 +72,17 @@ const PRIORITY_STYLES: Record<TaskPriority, string> = {
   high: 'border-rose-300 bg-rose-100 text-rose-700',
 }
 
+const MEMBER_BADGE_STYLES = [
+  'bg-rose-100 text-rose-700',
+  'bg-blue-100 text-blue-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-amber-100 text-amber-700',
+  'bg-violet-100 text-violet-700',
+  'bg-cyan-100 text-cyan-700',
+  'bg-fuchsia-100 text-fuchsia-700',
+  'bg-lime-100 text-lime-700',
+]
+
 function formatDate(isoDate: string): string {
   return new Date(isoDate).toLocaleDateString('ru-RU', {
     day: '2-digit',
@@ -68,6 +93,14 @@ function formatDate(isoDate: string): string {
 
 function displayName(value: string): string {
   return value.trim() || 'Пользователь'
+}
+
+function colorIndexFromUserId(userId: string): number {
+  let hash = 0
+  for (let i = 0; i < userId.length; i += 1) {
+    hash = (hash * 31 + userId.charCodeAt(i)) >>> 0
+  }
+  return hash % MEMBER_BADGE_STYLES.length
 }
 
 export function BoardsPage({ userName, userRole }: BoardsPageProps) {
@@ -93,6 +126,13 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
   const [taskDeleteId, setTaskDeleteId] = useState<string | null>(null)
   const [taskForm, setTaskForm] = useState<TaskFormState>(initialTaskForm)
 
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  const [boardMembers, setBoardMembers] = useState<BoardMember[]>([])
+  const [isAccessLoading, setAccessLoading] = useState(false)
+  const [memberSearchQuery, setMemberSearchQuery] = useState('')
+  const [memberRoleFilter, setMemberRoleFilter] = useState('')
+  const [selectedUserToAdd, setSelectedUserToAdd] = useState('')
+
   const selectedBoard = useMemo(() => boards.find((board) => board.id === routeBoardId) ?? null, [boards, routeBoardId])
   const selectedBoardId = selectedBoard?.id ?? null
   const isTaskEditPage = location.pathname.endsWith('/edit')
@@ -113,6 +153,22 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
       })),
     [tasks],
   )
+
+  const availableProfiles = useMemo(() => {
+    const query = memberSearchQuery.trim().toLowerCase()
+    return profiles.filter((profile) => {
+      if (memberRoleFilter && profile.role !== memberRoleFilter) {
+        return false
+      }
+      if (!query) {
+        return true
+      }
+      return (
+        profile.displayName.toLowerCase().includes(query) ||
+        profile.role.toLowerCase().includes(query)
+      )
+    })
+  }, [profiles, memberSearchQuery, memberRoleFilter])
 
   const setBoardField = (field: keyof BoardFormState, value: string) => {
     setBoardForm((prev) => ({ ...prev, [field]: value }))
@@ -188,6 +244,29 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
       setTasksLoading(false)
     })
   }, [routeBoardId])
+
+  const loadBoardAccessData = async (boardId: string) => {
+    setAccessLoading(true)
+    try {
+      const [loadedProfiles, loadedMembers] = await Promise.all([listProfiles(), listBoardMembers(boardId)])
+      setProfiles(loadedProfiles)
+      setBoardMembers(loadedMembers)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Не удалось загрузить пользователей.')
+    } finally {
+      setAccessLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedBoardId || routeTaskId || !currentUserId) {
+      return
+    }
+    setMemberSearchQuery('')
+    setMemberRoleFilter('')
+    setSelectedUserToAdd('')
+    void loadBoardAccessData(selectedBoardId)
+  }, [selectedBoardId, routeTaskId, currentUserId])
 
   useEffect(() => {
     if (!isTaskEditPage || !selectedTask) {
@@ -391,6 +470,41 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Не удалось удалить задачу.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAddBoardMember = async () => {
+    if (!selectedBoardId || !currentUserId || !selectedUserToAdd) {
+      return
+    }
+
+    setSaving(true)
+    setErrorMessage(null)
+    try {
+      const createdMember = await addBoardMember(selectedBoardId, selectedUserToAdd, currentUserId)
+      setBoardMembers((prev) => [...prev, createdMember])
+      setSelectedUserToAdd('')
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Не удалось добавить пользователя к доске.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRemoveBoardMember = async (userId: string) => {
+    if (!selectedBoardId) {
+      return
+    }
+
+    setSaving(true)
+    setErrorMessage(null)
+    try {
+      await removeBoardMember(selectedBoardId, userId)
+      setBoardMembers((prev) => prev.filter((member) => member.userId !== userId))
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Не удалось удалить доступ пользователя.')
     } finally {
       setSaving(false)
     }
@@ -607,7 +721,117 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
             ) : null}
           </section>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-3">
+          <>
+            <section className="mb-6 rounded-2xl border border-rose-200/80 bg-white/90 p-4 shadow-sm">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold text-slate-900">Добавить пользователя</h2>
+                <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs text-slate-600">
+                  {boardMembers.length} участников
+                </span>
+              </div>
+
+              {isAccessLoading ? (
+                <p className="rounded-xl border border-rose-200 bg-white px-4 py-3 text-sm text-slate-600">
+                  Загружаем пользователей...
+                </p>
+              ) : (
+                <>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <label className="block text-sm text-slate-700 md:col-span-1">
+                      Поиск пользователя
+                      <input
+                        type="search"
+                        value={memberSearchQuery}
+                        onChange={(event) => setMemberSearchQuery(event.target.value)}
+                        placeholder="Имя или роль"
+                        className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none"
+                      />
+                    </label>
+                    <label className="block text-sm text-slate-700 md:col-span-1">
+                      Фильтр по роли
+                      <select
+                        value={memberRoleFilter}
+                        onChange={(event) => setMemberRoleFilter(event.target.value)}
+                        className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none"
+                      >
+                        <option value="">Все роли</option>
+                        {IT_TEAM_ROLES.map((role) => (
+                          <option key={role} value={role}>
+                            {role}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block text-sm text-slate-700 md:col-span-1">
+                      Выберите пользователя
+                      <select
+                        value={selectedUserToAdd}
+                        onChange={(event) => setSelectedUserToAdd(event.target.value)}
+                        disabled={!currentUserId || availableProfiles.length === 0}
+                        className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <option value="">Выберите пользователя</option>
+                        {availableProfiles.map((profile) => (
+                          <option key={profile.id} value={profile.id}>
+                            {profile.displayName} · {profile.role || 'Без роли'}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleAddBoardMember()}
+                      disabled={!currentUserId || !selectedUserToAdd || isSaving}
+                      className="rounded-lg bg-gradient-to-r from-fuchsia-500 to-pink-500 px-4 py-2 text-sm font-medium text-white transition hover:from-fuchsia-400 hover:to-pink-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Добавить пользователя
+                    </button>
+                  </div>
+
+                  <div className="mt-4">
+                    {boardMembers.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-rose-200 px-4 py-4 text-sm text-slate-500">
+                        Пока никому не выдан доступ к этой доске.
+                      </p>
+                    ) : (
+                      <div className="w-full overflow-x-auto pb-1">
+                        <div className="ml-auto flex w-max items-center justify-end gap-3 px-1 pt-2">
+                          {boardMembers.map((member) => {
+                            const shortName = member.displayName.trim().slice(0, 3).toUpperCase() || 'USR'
+                            const memberBadgeStyle = MEMBER_BADGE_STYLES[colorIndexFromUserId(member.userId)]
+                            return (
+                              <article
+                                key={member.userId}
+                                className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-white p-0.5"
+                                title={`${member.displayName}${member.role ? ` · ${member.role}` : ''}`}
+                              >
+                                <span className={`flex h-full w-full items-center justify-center rounded-full text-xs font-semibold ${memberBadgeStyle}`}>
+                                  {shortName}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleRemoveBoardMember(member.userId)}
+                                  disabled={!currentUserId || isSaving}
+                                  aria-label={`Удалить пользователя ${member.displayName}`}
+                                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-red-200 bg-red-50 text-[11px] font-semibold leading-none text-red-700 shadow-sm transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  ×
+                                </button>
+                              </article>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </section>
+
+            <div className="grid gap-4 lg:grid-cols-3">
             {isTasksLoading ? (
               <div className="lg:col-span-3 rounded-xl border border-rose-200 bg-white/90 px-4 py-5 text-sm text-slate-600">
                 Загружаем задачи выбранной доски...
@@ -653,7 +877,8 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
                 </div>
               </section>
             ))}
-          </div>
+            </div>
+          </>
         )
       ) : (
         <section className="rounded-2xl border border-rose-200/80 bg-white/90 p-6 text-center shadow-sm">

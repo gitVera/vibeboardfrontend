@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Board, Task, TaskPriority, TaskStatus } from '../types/boards'
+import type { Board, BoardMember, Task, TaskPriority, TaskStatus } from '../types/boards'
 
 type BoardRow = {
   id: string
@@ -22,14 +22,57 @@ type TaskRow = {
   updated_at: string
 }
 
+type ProfileRow = {
+  id: string
+  display_name: string
+  role: string
+}
+
+type BoardMemberRow = {
+  board_id: string
+  user_id: string
+  added_by: string | null
+  created_at: string
+}
+
 function mapBoard(row: BoardRow): Board {
   return {
     id: row.id,
+    ownerId: row.owner_id,
     name: row.name,
     description: row.description ?? '',
     ownerLabel: row.owner_label,
     updatedAt: row.updated_at,
   }
+}
+
+function mapBoardMember(row: BoardMemberRow, profile?: ProfileRow): BoardMember {
+  return {
+    boardId: row.board_id,
+    userId: row.user_id,
+    displayName: profile?.display_name ?? 'Пользователь',
+    role: profile?.role ?? '',
+    addedBy: row.added_by,
+    createdAt: row.created_at,
+  }
+}
+
+async function loadProfilesMap(userIds: string[]): Promise<Map<string, ProfileRow>> {
+  if (userIds.length === 0) {
+    return new Map()
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, role')
+    .in('id', userIds)
+
+  if (error) {
+    throw error
+  }
+
+  const rows = (data ?? []) as ProfileRow[]
+  return new Map(rows.map((row) => [row.id, row]))
 }
 
 function mapTask(row: TaskRow): Task {
@@ -190,6 +233,49 @@ export async function updateTask(
 
 export async function deleteTask(taskId: string): Promise<void> {
   const { error } = await supabase.from('tasks').delete().eq('id', taskId)
+  if (error) {
+    throw error
+  }
+}
+
+export async function listBoardMembers(boardId: string): Promise<BoardMember[]> {
+  const { data, error } = await supabase
+    .from('board_members')
+    .select('board_id, user_id, added_by, created_at')
+    .eq('board_id', boardId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    throw error
+  }
+
+  const memberRows = (data ?? []) as BoardMemberRow[]
+  const profilesMap = await loadProfilesMap(memberRows.map((member) => member.user_id))
+  return memberRows.map((row) => mapBoardMember(row, profilesMap.get(row.user_id)))
+}
+
+export async function addBoardMember(boardId: string, userId: string, addedBy: string): Promise<BoardMember> {
+  const { data, error } = await supabase
+    .from('board_members')
+    .insert({
+      board_id: boardId,
+      user_id: userId,
+      added_by: addedBy,
+    })
+    .select('board_id, user_id, added_by, created_at')
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  const profilesMap = await loadProfilesMap([userId])
+  return mapBoardMember(data as BoardMemberRow, profilesMap.get(userId))
+}
+
+export async function removeBoardMember(boardId: string, userId: string): Promise<void> {
+  const { error } = await supabase.from('board_members').delete().eq('board_id', boardId).eq('user_id', userId)
+
   if (error) {
     throw error
   }

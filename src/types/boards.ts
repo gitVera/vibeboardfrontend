@@ -3,10 +3,26 @@ export type TaskPriority = 'low' | 'medium' | 'high'
 
 export type Board = {
   id: string
+  ownerId: string
   name: string
   description: string
   ownerLabel: string
   updatedAt: string
+}
+
+export type Profile = {
+  id: string
+  displayName: string
+  role: string
+}
+
+export type BoardMember = {
+  boardId: string
+  userId: string
+  displayName: string
+  role: string
+  addedBy: string | null
+  createdAt: string
 }
 
 export type Task = {

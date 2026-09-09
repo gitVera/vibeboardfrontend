@@ -5,6 +5,7 @@ import { AuthModal } from './components/AuthModal'
 import { RoleSelectionModal } from './components/RoleSelectionModal'
 import type { ItTeamRole } from './constants/roles'
 import { AUTH_CALLBACK_PATH } from './lib/auth'
+import { upsertProfile } from './lib/profilesApi'
 import { supabase } from './lib/supabase'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import { BoardsPage } from './pages/BoardsPage'
@@ -34,6 +35,19 @@ function isBoardsPath(pathname: string): boolean {
   return pathname === '/boards' || pathname.startsWith('/boards/')
 }
 
+function getUserRole(session: Session): string {
+  const role = session.user.user_metadata?.role
+  return typeof role === 'string' ? role.trim() : ''
+}
+
+async function syncUserProfile(session: Session): Promise<void> {
+  await upsertProfile({
+    id: session.user.id,
+    displayName: getUserDisplayName(session),
+    role: getUserRole(session),
+  })
+}
+
 function App() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -49,10 +63,17 @@ function App() {
   useEffect(() => {
     let isMounted = true
 
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: currentSession } }) => {
       if (isMounted) {
         setSession(currentSession)
         setRoleModalOpen(Boolean(currentSession && !hasUserRole(currentSession)))
+        if (currentSession) {
+          try {
+            await syncUserProfile(currentSession)
+          } catch {
+            // Profile sync should not block app startup.
+          }
+        }
         if (currentSession && !isBoardsPath(location.pathname) && location.pathname !== AUTH_CALLBACK_PATH) {
           navigate('/boards', { replace: true })
         }
@@ -74,6 +95,12 @@ function App() {
       if (nextSession && !hasUserRole(nextSession)) {
         setRoleModalOpen(true)
         return
+      }
+
+      if (nextSession) {
+        void syncUserProfile(nextSession).catch(() => {
+          // Profile sync should not block auth flow.
+        })
       }
 
       setRoleModalOpen(false)
@@ -117,6 +144,14 @@ function App() {
       if (error) {
         setRoleError(error.message)
         return
+      }
+
+      const {
+        data: { session: updatedSession },
+      } = await supabase.auth.getSession()
+
+      if (updatedSession) {
+        await syncUserProfile(updatedSession)
       }
 
       setRoleModalOpen(false)
