@@ -235,7 +235,34 @@ function App() {
             }
           />
           <Route
-            path="/boards/*"
+            path="/boards"
+            element={
+              <BoardsPage
+                userName={isAuthenticated ? displayName : 'Гость'}
+                userRole={isAuthenticated ? userRole : undefined}
+              />
+            }
+          />
+          <Route
+            path="/boards/:boardId"
+            element={
+              <BoardsPage
+                userName={isAuthenticated ? displayName : 'Гость'}
+                userRole={isAuthenticated ? userRole : undefined}
+              />
+            }
+          />
+          <Route
+            path="/boards/:boardId/tasks/:taskId"
+            element={
+              <BoardsPage
+                userName={isAuthenticated ? displayName : 'Гость'}
+                userRole={isAuthenticated ? userRole : undefined}
+              />
+            }
+          />
+          <Route
+            path="/boards/:boardId/tasks/:taskId/edit"
             element={
               <BoardsPage
                 userName={isAuthenticated ? displayName : 'Гость'}
