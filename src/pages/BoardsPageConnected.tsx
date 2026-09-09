@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   createBoard,
   createTask,
@@ -75,8 +75,10 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null)
   const [isLoading, setLoading] = useState(true)
+  const [isTasksLoading, setTasksLoading] = useState(false)
   const [isSaving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const tasksRequestIdRef = useRef(0)
 
   const [isBoardCreateOpen, setBoardCreateOpen] = useState(false)
   const [boardViewId, setBoardViewId] = useState<string | null>(null)
@@ -135,8 +137,19 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
   }
 
   const loadTasksForBoard = async (boardId: string) => {
-    const data = await listTasks(boardId)
-    setTasks(data)
+    const requestId = ++tasksRequestIdRef.current
+    setTasksLoading(true)
+    setTasks([])
+    try {
+      const data = await listTasks(boardId)
+      if (tasksRequestIdRef.current === requestId) {
+        setTasks(data)
+      }
+    } finally {
+      if (tasksRequestIdRef.current === requestId) {
+        setTasksLoading(false)
+      }
+    }
   }
 
   const loadBoardsAndTasks = async () => {
@@ -180,12 +193,21 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
   useEffect(() => {
     if (!selectedBoardId) {
       setTasks([])
+      setTasksLoading(false)
       return
     }
     void loadTasksForBoard(selectedBoardId).catch((error) => {
       setErrorMessage(error instanceof Error ? error.message : 'Не удалось загрузить задачи.')
+      setTasksLoading(false)
     })
   }, [selectedBoardId])
+
+  const handleSelectBoard = (boardId: string) => {
+    if (boardId === selectedBoardId) {
+      return
+    }
+    setSelectedBoardId(boardId)
+  }
 
   const openCreateBoard = () => {
     setBoardForm({
@@ -445,7 +467,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => setSelectedBoardId(board.id)}
+                    onClick={() => handleSelectBoard(board.id)}
                     className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white transition hover:bg-white/10"
                   >
                     Открыть
@@ -481,6 +503,11 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
       </section>
 
       <div className="grid gap-4 lg:grid-cols-3">
+        {isTasksLoading ? (
+          <div className="lg:col-span-3 rounded-xl border border-white/10 bg-white/5 px-4 py-5 text-sm text-slate-300">
+            Загружаем задачи выбранной доски...
+          </div>
+        ) : null}
         {columns.map((column) => (
           <section key={column.id} className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
             <div className="mb-4 flex items-center justify-between">
