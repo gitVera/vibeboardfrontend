@@ -31,6 +31,7 @@ export type Task = {
   title: string
   description: string
   ownerLabel: string
+  deadlineAt: string | null
   priority: TaskPriority
   status: TaskStatus
   position: number

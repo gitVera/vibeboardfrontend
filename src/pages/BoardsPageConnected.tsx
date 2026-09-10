@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { IT_TEAM_ROLES } from '../constants/roles'
 import {
@@ -42,6 +42,7 @@ type TaskFormState = {
   title: string
   description: string
   ownerLabel: string
+  deadlineAt: string
   priority: TaskPriority
   status: TaskStatus
 }
@@ -56,6 +57,7 @@ const initialTaskForm: TaskFormState = {
   title: '',
   description: '',
   ownerLabel: '',
+  deadlineAt: '',
   priority: 'medium',
   status: 'todo',
 }
@@ -95,6 +97,42 @@ function displayName(value: string): string {
   return value.trim() || 'Пользователь'
 }
 
+function displayTaskOwner(value: string): string {
+  return value.trim() || 'Не назначено'
+}
+
+function formatDeadlineDate(value: string | null): string {
+  if (!value) {
+    return 'Не назначено'
+  }
+  const [year, month, day] = value.split('-')
+  if (!year || !month || !day) {
+    return value
+  }
+  return `${day}.${month}.${year}`
+}
+
+function getTodayIsoDate(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getDeadlineTone(deadlineAt: string | null): string {
+  if (!deadlineAt) {
+    return 'text-slate-500'
+  }
+
+  const today = getTodayIsoDate()
+  if (deadlineAt < today) {
+    return 'text-red-700'
+  }
+
+  return 'text-emerald-700'
+}
+
 function colorIndexFromUserId(userId: string): number {
   let hash = 0
   for (let i = 0; i < userId.length; i += 1) {
@@ -132,6 +170,8 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
   const [memberSearchQuery, setMemberSearchQuery] = useState('')
   const [memberRoleFilter, setMemberRoleFilter] = useState('')
   const [selectedUserToAdd, setSelectedUserToAdd] = useState('')
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+  const [dragOverColumnId, setDragOverColumnId] = useState<TaskStatus | null>(null)
 
   const selectedBoard = useMemo(() => boards.find((board) => board.id === routeBoardId) ?? null, [boards, routeBoardId])
   const selectedBoardId = selectedBoard?.id ?? null
@@ -169,6 +209,34 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
       )
     })
   }, [profiles, memberSearchQuery, memberRoleFilter])
+
+  const taskOwnerOptions = useMemo(() => {
+    const ownerLabels = new Set<string>()
+
+    for (const member of boardMembers) {
+      const label = member.displayName.trim()
+      if (label) {
+        ownerLabels.add(label)
+      }
+    }
+
+    const boardOwnerLabel = selectedBoard?.ownerLabel.trim()
+    if (boardOwnerLabel) {
+      ownerLabels.add(boardOwnerLabel)
+    }
+
+    const currentUserLabel = displayName(userName)
+    if (currentUserLabel) {
+      ownerLabels.add(currentUserLabel)
+    }
+
+    const selectedTaskOwnerLabel = taskForm.ownerLabel.trim()
+    if (selectedTaskOwnerLabel) {
+      ownerLabels.add(selectedTaskOwnerLabel)
+    }
+
+    return Array.from(ownerLabels).sort((left, right) => left.localeCompare(right, 'ru'))
+  }, [boardMembers, selectedBoard, taskForm.ownerLabel, userName])
 
   const setBoardField = (field: keyof BoardFormState, value: string) => {
     setBoardForm((prev) => ({ ...prev, [field]: value }))
@@ -259,14 +327,14 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
   }
 
   useEffect(() => {
-    if (!selectedBoardId || routeTaskId || !currentUserId) {
+    if (!selectedBoardId || !currentUserId) {
       return
     }
     setMemberSearchQuery('')
     setMemberRoleFilter('')
     setSelectedUserToAdd('')
     void loadBoardAccessData(selectedBoardId)
-  }, [selectedBoardId, routeTaskId, currentUserId])
+  }, [selectedBoardId, currentUserId])
 
   useEffect(() => {
     if (!isTaskEditPage || !selectedTask) {
@@ -277,6 +345,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
       title: selectedTask.title,
       description: selectedTask.description,
       ownerLabel: selectedTask.ownerLabel,
+      deadlineAt: selectedTask.deadlineAt ?? '',
       priority: selectedTask.priority,
       status: selectedTask.status,
     })
@@ -309,7 +378,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
   const openCreateTask = (status: TaskStatus) => {
     setTaskForm({
       ...initialTaskForm,
-      ownerLabel: displayName(userName),
+      ownerLabel: '',
       status,
     })
     setTaskCreateOpen(true)
@@ -404,7 +473,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
 
     const title = taskForm.title.trim()
     const ownerLabel = taskForm.ownerLabel.trim()
-    if (!title || !ownerLabel) return
+    if (!title) return
 
     const position = tasks.filter((task) => task.status === taskForm.status).length
     setSaving(true)
@@ -415,6 +484,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
         title,
         description: taskForm.description.trim(),
         ownerLabel,
+        deadlineAt: taskForm.deadlineAt || null,
         priority: taskForm.priority,
         status: taskForm.status,
         position,
@@ -434,7 +504,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
 
     const title = taskForm.title.trim()
     const ownerLabel = taskForm.ownerLabel.trim()
-    if (!title || !ownerLabel) return
+    if (!title) return
 
     const position = tasks.filter((task) => task.id !== selectedTask.id && task.status === taskForm.status).length
     setSaving(true)
@@ -444,6 +514,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
         title,
         description: taskForm.description.trim(),
         ownerLabel,
+        deadlineAt: taskForm.deadlineAt || null,
         priority: taskForm.priority,
         status: taskForm.status,
         position,
@@ -505,6 +576,70 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
       setBoardMembers((prev) => prev.filter((member) => member.userId !== userId))
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Не удалось удалить доступ пользователя.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleTaskDragStart = (taskId: string) => {
+    if (!currentUserId) {
+      return
+    }
+    setDraggedTaskId(taskId)
+  }
+
+  const handleTaskDragEnd = () => {
+    setDraggedTaskId(null)
+    setDragOverColumnId(null)
+  }
+
+  const handleColumnDragOver = (event: DragEvent<HTMLElement>, columnId: TaskStatus) => {
+    if (!currentUserId || !draggedTaskId) {
+      return
+    }
+    event.preventDefault()
+    setDragOverColumnId(columnId)
+  }
+
+  const handleColumnDragLeave = (event: DragEvent<HTMLElement>, columnId: TaskStatus) => {
+    if (event.target !== event.currentTarget) {
+      return
+    }
+    setDragOverColumnId((prev) => (prev === columnId ? null : prev))
+  }
+
+  const handleColumnDrop = async (event: DragEvent<HTMLElement>, targetColumnId: TaskStatus) => {
+    event.preventDefault()
+    setDragOverColumnId(null)
+
+    if (!selectedBoardId || !draggedTaskId) {
+      setDraggedTaskId(null)
+      return
+    }
+
+    const task = tasks.find((item) => item.id === draggedTaskId)
+    setDraggedTaskId(null)
+
+    if (!task || task.status === targetColumnId) {
+      return
+    }
+
+    const position = tasks.filter((item) => item.status === targetColumnId).length
+    setSaving(true)
+    setErrorMessage(null)
+    try {
+      await updateTask(task.id, {
+        title: task.title,
+        description: task.description,
+        ownerLabel: task.ownerLabel,
+        deadlineAt: task.deadlineAt,
+        priority: task.priority,
+        status: targetColumnId,
+        position,
+      })
+      await loadTasksForBoard(selectedBoardId)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Не удалось переместить задачу.')
     } finally {
       setSaving(false)
     }
@@ -665,14 +800,18 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
                   <h3 className="text-lg font-semibold text-slate-900">{selectedTask.title}</h3>
                   <p className="mt-2 text-sm text-slate-600">{selectedTask.description || 'Без описания.'}</p>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-xl border border-rose-200 bg-white p-3">
                     <p className="text-xs text-slate-500">Колонка</p>
                     <p className="mt-1 text-sm text-slate-900">{BOARD_COLUMNS.find((column) => column.id === selectedTask.status)?.title}</p>
                   </div>
                   <div className="rounded-xl border border-rose-200 bg-white p-3">
                     <p className="text-xs text-slate-500">Исполнитель</p>
-                    <p className="mt-1 text-sm text-slate-900">{selectedTask.ownerLabel}</p>
+                    <p className="mt-1 text-sm text-slate-900">{displayTaskOwner(selectedTask.ownerLabel)}</p>
+                  </div>
+                  <div className="rounded-xl border border-rose-200 bg-white p-3">
+                    <p className="text-xs text-slate-500">Выполнить к</p>
+                    <p className={`mt-1 text-sm ${getDeadlineTone(selectedTask.deadlineAt)}`}>{formatDeadlineDate(selectedTask.deadlineAt)}</p>
                   </div>
                   <div className="rounded-xl border border-rose-200 bg-white p-3">
                     <p className="text-xs text-slate-500">Приоритет</p>
@@ -692,7 +831,17 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
                   <input type="text" value={taskForm.title} onChange={(event) => setTaskField('title', event.target.value)} required className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none" />
                 </label>
                 <label className="block text-sm text-slate-700">Исполнитель
-                  <input type="text" value={taskForm.ownerLabel} onChange={(event) => setTaskField('ownerLabel', event.target.value)} required className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none" />
+                  <select value={taskForm.ownerLabel} onChange={(event) => setTaskField('ownerLabel', event.target.value)} className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none">
+                    <option value="">Не назначено</option>
+                    {taskOwnerOptions.map((ownerLabel) => (
+                      <option key={ownerLabel} value={ownerLabel} className="bg-white text-slate-800">
+                        {ownerLabel}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm text-slate-700">Выполнить к
+                  <input type="date" value={taskForm.deadlineAt} onChange={(event) => setTaskField('deadlineAt', event.target.value)} className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none" />
                 </label>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block text-sm text-slate-700">Приоритет
@@ -798,7 +947,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
                       </p>
                     ) : (
                       <div className="w-full overflow-x-auto pb-1">
-                        <div className="ml-auto flex w-max items-center justify-end gap-3 px-1 pt-2">
+                        <div className="flex min-w-full w-max items-center justify-end gap-3 px-1 pt-2">
                           {boardMembers.map((member) => {
                             const shortName = member.displayName.trim().slice(0, 3).toUpperCase() || 'USR'
                             const memberBadgeStyle = MEMBER_BADGE_STYLES[colorIndexFromUserId(member.userId)]
@@ -838,7 +987,17 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
               </div>
             ) : null}
             {columns.map((column) => (
-              <section key={column.id} className="rounded-2xl border border-rose-200/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm">
+              <section
+                key={column.id}
+                className={`rounded-2xl border p-4 shadow-sm backdrop-blur-sm transition ${
+                  dragOverColumnId === column.id
+                    ? 'border-dashed border-pink-400 bg-rose-100/80'
+                    : 'border-rose-200/80 bg-white/90'
+                }`}
+                onDragOver={(event) => handleColumnDragOver(event, column.id)}
+                onDragLeave={(event) => handleColumnDragLeave(event, column.id)}
+                onDrop={(event) => void handleColumnDrop(event, column.id)}
+              >
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="font-semibold text-slate-900">{column.title}</h2>
                   <div className="flex items-center gap-2">
@@ -855,15 +1014,24 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
                 </div>
                 <div className="space-y-3">
                   {column.tasks.map((task) => (
-                    <article key={task.id} className="rounded-xl border border-rose-200 bg-white p-4 transition hover:border-pink-300">
+                    <article
+                      key={task.id}
+                      draggable={Boolean(currentUserId)}
+                      onDragStart={() => handleTaskDragStart(task.id)}
+                      onDragEnd={handleTaskDragEnd}
+                      className={`rounded-xl border border-rose-200 bg-white p-4 transition hover:border-pink-300 ${
+                        draggedTaskId === task.id ? 'cursor-grabbing opacity-60' : currentUserId ? 'cursor-grab' : ''
+                      }`}
+                    >
                       <h3 className="text-sm font-medium text-slate-900">{task.title}</h3>
                       {task.description ? <p className="mt-2 text-xs text-slate-600">{task.description}</p> : null}
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <span className={`rounded-full border px-2 py-0.5 text-xs ${PRIORITY_STYLES[task.priority]}`}>
                           {PRIORITY_LABELS[task.priority]}
                         </span>
-                        <span className="truncate text-xs text-slate-600">{task.ownerLabel}</span>
+                        <span className="truncate text-xs text-slate-600">{displayTaskOwner(task.ownerLabel)}</span>
                       </div>
+                      <p className={`mt-2 text-xs ${getDeadlineTone(task.deadlineAt)}`}>Выполнить к: {formatDeadlineDate(task.deadlineAt)}</p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button type="button" onClick={() => openTaskPage(task)} className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] text-slate-700 transition hover:bg-rose-100">Просмотр</button>
                         <button type="button" onClick={() => openTaskEditPage(task)} disabled={!currentUserId} className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] text-slate-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60">Изменить</button>
@@ -918,7 +1086,17 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
                 <input type="text" value={taskForm.title} onChange={(event) => setTaskField('title', event.target.value)} required className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none" />
               </label>
               <label className="block text-sm text-slate-700">Исполнитель
-                <input type="text" value={taskForm.ownerLabel} onChange={(event) => setTaskField('ownerLabel', event.target.value)} required className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none" />
+                <select value={taskForm.ownerLabel} onChange={(event) => setTaskField('ownerLabel', event.target.value)} className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none">
+                  <option value="">Не назначено</option>
+                  {taskOwnerOptions.map((ownerLabel) => (
+                    <option key={ownerLabel} value={ownerLabel} className="bg-white text-slate-800">
+                      {ownerLabel}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm text-slate-700">Выполнить к
+                <input type="date" value={taskForm.deadlineAt} onChange={(event) => setTaskField('deadlineAt', event.target.value)} className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none" />
               </label>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm text-slate-700">Приоритет

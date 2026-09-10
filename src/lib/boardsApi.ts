@@ -16,6 +16,7 @@ type TaskRow = {
   title: string
   description: string
   owner_label: string
+  deadline_at: string | null
   priority: TaskPriority
   status: TaskStatus
   position: number
@@ -82,6 +83,7 @@ function mapTask(row: TaskRow): Task {
     title: row.title,
     description: row.description ?? '',
     ownerLabel: row.owner_label,
+    deadlineAt: row.deadline_at,
     priority: row.priority,
     status: row.status,
     position: row.position ?? 0,
@@ -158,7 +160,7 @@ export async function deleteBoard(boardId: string): Promise<void> {
 export async function listTasks(boardId: string): Promise<Task[]> {
   const { data, error } = await supabase
     .from('tasks')
-    .select('id, board_id, title, description, owner_label, priority, status, position, updated_at')
+    .select('id, board_id, title, description, owner_label, deadline_at, priority, status, position, updated_at')
     .eq('board_id', boardId)
     .order('position', { ascending: true })
 
@@ -174,6 +176,7 @@ export async function createTask(input: {
   title: string
   description: string
   ownerLabel: string
+  deadlineAt: string | null
   priority: TaskPriority
   status: TaskStatus
   position: number
@@ -185,11 +188,12 @@ export async function createTask(input: {
       title: input.title,
       description: input.description,
       owner_label: input.ownerLabel,
+      deadline_at: input.deadlineAt,
       priority: input.priority,
       status: input.status,
       position: input.position,
     })
-    .select('id, board_id, title, description, owner_label, priority, status, position, updated_at')
+    .select('id, board_id, title, description, owner_label, deadline_at, priority, status, position, updated_at')
     .single()
 
   if (error) {
@@ -205,6 +209,7 @@ export async function updateTask(
     title: string
     description: string
     ownerLabel: string
+    deadlineAt: string | null
     priority: TaskPriority
     status: TaskStatus
     position: number
@@ -216,12 +221,13 @@ export async function updateTask(
       title: input.title,
       description: input.description,
       owner_label: input.ownerLabel,
+      deadline_at: input.deadlineAt,
       priority: input.priority,
       status: input.status,
       position: input.position,
     })
     .eq('id', taskId)
-    .select('id, board_id, title, description, owner_label, priority, status, position, updated_at')
+    .select('id, board_id, title, description, owner_label, deadline_at, priority, status, position, updated_at')
     .single()
 
   if (error) {
