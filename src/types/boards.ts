@@ -1,4 +1,4 @@
-export type TaskStatus = 'todo' | 'in_progress' | 'done'
+export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high'
 
 export type Board = {
@@ -25,6 +25,15 @@ export type BoardMember = {
   createdAt: string
 }
 
+export type BoardColumnDefinition = {
+  id: string
+  boardId: string
+  key: string
+  title: string
+  position: number
+  isSystem: boolean
+}
+
 export type Task = {
   id: string
   boardId: string
@@ -32,20 +41,27 @@ export type Task = {
   description: string
   ownerLabel: string
   deadlineAt: string | null
+  columnId: string
   priority: TaskPriority
   status: TaskStatus
   position: number
   updatedAt: string
 }
 
-export type BoardColumn = {
-  id: TaskStatus
+export type BoardColumnView = {
+  id: string
+  key: string
   title: string
+  position: number
+  isSystem: boolean
   tasks: Task[]
 }
 
-export const BOARD_COLUMNS: Array<{ id: TaskStatus; title: string }> = [
-  { id: 'todo', title: 'To Do' },
-  { id: 'in_progress', title: 'In Progress' },
-  { id: 'done', title: 'Done' },
+export const DEFAULT_BOARD_COLUMNS: Array<{ key: string; title: string; position: number; isSystem: boolean }> = [
+  { key: 'todo', title: 'To Do', position: 0, isSystem: true },
+  { key: 'in_progress', title: 'In Progress', position: 1, isSystem: true },
+  { key: 'in_review', title: 'In Review', position: 2, isSystem: true },
+  { key: 'done', title: 'Done', position: 3, isSystem: true },
 ]
+
+export const KNOWN_TASK_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done']

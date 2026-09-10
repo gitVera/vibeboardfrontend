@@ -1,5 +1,14 @@
 import { supabase } from './supabase'
-import type { Board, BoardMember, Task, TaskPriority, TaskStatus } from '../types/boards'
+import {
+  DEFAULT_BOARD_COLUMNS,
+  KNOWN_TASK_STATUSES,
+  type Board,
+  type BoardColumnDefinition,
+  type BoardMember,
+  type Task,
+  type TaskPriority,
+  type TaskStatus,
+} from '../types/boards'
 
 type BoardRow = {
   id: string
@@ -10,6 +19,15 @@ type BoardRow = {
   updated_at: string
 }
 
+type BoardColumnRow = {
+  id: string
+  board_id: string
+  key: string
+  title: string
+  position: number
+  is_system: boolean
+}
+
 type TaskRow = {
   id: string
   board_id: string
@@ -17,6 +35,7 @@ type TaskRow = {
   description: string
   owner_label: string
   deadline_at: string | null
+  column_id: string | null
   priority: TaskPriority
   status: TaskStatus
   position: number
@@ -36,6 +55,13 @@ type BoardMemberRow = {
   created_at: string
 }
 
+function statusFromColumnKey(key: string): TaskStatus {
+  if (KNOWN_TASK_STATUSES.includes(key as TaskStatus)) {
+    return key as TaskStatus
+  }
+  return 'todo'
+}
+
 function mapBoard(row: BoardRow): Board {
   return {
     id: row.id,
@@ -44,6 +70,17 @@ function mapBoard(row: BoardRow): Board {
     description: row.description ?? '',
     ownerLabel: row.owner_label,
     updatedAt: row.updated_at,
+  }
+}
+
+function mapBoardColumn(row: BoardColumnRow): BoardColumnDefinition {
+  return {
+    id: row.id,
+    boardId: row.board_id,
+    key: row.key,
+    title: row.title,
+    position: row.position ?? 0,
+    isSystem: row.is_system,
   }
 }
 
@@ -77,6 +114,10 @@ async function loadProfilesMap(userIds: string[]): Promise<Map<string, ProfileRo
 }
 
 function mapTask(row: TaskRow): Task {
+  if (!row.column_id) {
+    throw new Error(`Task ${row.id} is missing column_id`)
+  }
+
   return {
     id: row.id,
     boardId: row.board_id,
@@ -84,10 +125,27 @@ function mapTask(row: TaskRow): Task {
     description: row.description ?? '',
     ownerLabel: row.owner_label,
     deadlineAt: row.deadline_at,
+    columnId: row.column_id,
     priority: row.priority,
     status: row.status,
     position: row.position ?? 0,
     updatedAt: row.updated_at,
+  }
+}
+
+async function createDefaultBoardColumns(boardId: string): Promise<void> {
+  const { error } = await supabase.from('board_columns').insert(
+    DEFAULT_BOARD_COLUMNS.map((column) => ({
+      board_id: boardId,
+      key: column.key,
+      title: column.title,
+      position: column.position,
+      is_system: column.isSystem,
+    })),
+  )
+
+  if (error) {
+    throw error
   }
 }
 
@@ -125,7 +183,9 @@ export async function createBoard(input: {
     throw error
   }
 
-  return mapBoard(data as BoardRow)
+  const board = mapBoard(data as BoardRow)
+  await createDefaultBoardColumns(board.id)
+  return board
 }
 
 export async function updateBoard(
@@ -157,10 +217,132 @@ export async function deleteBoard(boardId: string): Promise<void> {
   }
 }
 
+export async function listBoardColumns(boardId: string): Promise<BoardColumnDefinition[]> {
+  const { data, error } = await supabase
+    .from('board_columns')
+    .select('id, board_id, key, title, position, is_system')
+    .eq('board_id', boardId)
+    .order('position', { ascending: true })
+
+  if (error) {
+    throw error
+  }
+
+  return ((data ?? []) as BoardColumnRow[]).map(mapBoardColumn)
+}
+
+export async function createBoardColumn(boardId: string, title: string): Promise<BoardColumnDefinition> {
+  const trimmedTitle = title.trim()
+  if (!trimmedTitle) {
+    throw new Error('Название колонки не может быть пустым.')
+  }
+
+  const existingColumns = await listBoardColumns(boardId)
+  const position = existingColumns.length
+  const key = `custom_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
+
+  const { data, error } = await supabase
+    .from('board_columns')
+    .insert({
+      board_id: boardId,
+      key,
+      title: trimmedTitle,
+      position,
+      is_system: false,
+    })
+    .select('id, board_id, key, title, position, is_system')
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return mapBoardColumn(data as BoardColumnRow)
+}
+
+export async function updateBoardColumn(columnId: string, title: string): Promise<BoardColumnDefinition> {
+  const trimmedTitle = title.trim()
+  if (!trimmedTitle) {
+    throw new Error('Название колонки не может быть пустым.')
+  }
+
+  const { data, error } = await supabase
+    .from('board_columns')
+    .update({ title: trimmedTitle })
+    .eq('id', columnId)
+    .select('id, board_id, key, title, position, is_system')
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return mapBoardColumn(data as BoardColumnRow)
+}
+
+export async function deleteBoardColumn(boardId: string, columnId: string): Promise<void> {
+  const columns = await listBoardColumns(boardId)
+  const column = columns.find((item) => item.id === columnId)
+  if (!column) {
+    throw new Error('Колонка не найдена.')
+  }
+
+  if (column.isSystem && column.key === 'todo') {
+    throw new Error('Колонку To Do нельзя удалить.')
+  }
+
+  const todoColumn = columns.find((item) => item.key === 'todo')
+  if (!todoColumn) {
+    throw new Error('Колонка To Do не найдена.')
+  }
+
+  const { data: movingTasks, error: movingTasksError } = await supabase
+    .from('tasks')
+    .select('id')
+    .eq('column_id', columnId)
+    .order('position', { ascending: true })
+
+  if (movingTasksError) {
+    throw movingTasksError
+  }
+
+  const { count: todoCount, error: todoCountError } = await supabase
+    .from('tasks')
+    .select('id', { count: 'exact', head: true })
+    .eq('column_id', todoColumn.id)
+
+  if (todoCountError) {
+    throw todoCountError
+  }
+
+  const basePosition = todoCount ?? 0
+  const taskRows = (movingTasks ?? []) as Array<{ id: string }>
+
+  for (let index = 0; index < taskRows.length; index += 1) {
+    const { error: moveError } = await supabase
+      .from('tasks')
+      .update({
+        column_id: todoColumn.id,
+        status: 'todo',
+        position: basePosition + index,
+      })
+      .eq('id', taskRows[index].id)
+
+    if (moveError) {
+      throw moveError
+    }
+  }
+
+  const { error: deleteError } = await supabase.from('board_columns').delete().eq('id', columnId)
+  if (deleteError) {
+    throw deleteError
+  }
+}
+
 export async function listTasks(boardId: string): Promise<Task[]> {
   const { data, error } = await supabase
     .from('tasks')
-    .select('id, board_id, title, description, owner_label, deadline_at, priority, status, position, updated_at')
+    .select('id, board_id, title, description, owner_label, deadline_at, column_id, priority, status, position, updated_at')
     .eq('board_id', boardId)
     .order('position', { ascending: true })
 
@@ -177,10 +359,18 @@ export async function createTask(input: {
   description: string
   ownerLabel: string
   deadlineAt: string | null
+  columnId: string
   priority: TaskPriority
-  status: TaskStatus
   position: number
 }): Promise<Task> {
+  const columns = await listBoardColumns(input.boardId)
+  const column = columns.find((item) => item.id === input.columnId)
+  if (!column) {
+    throw new Error('Колонка не найдена.')
+  }
+
+  const status = statusFromColumnKey(column.key)
+
   const { data, error } = await supabase
     .from('tasks')
     .insert({
@@ -189,11 +379,12 @@ export async function createTask(input: {
       description: input.description,
       owner_label: input.ownerLabel,
       deadline_at: input.deadlineAt,
+      column_id: input.columnId,
       priority: input.priority,
-      status: input.status,
+      status,
       position: input.position,
     })
-    .select('id, board_id, title, description, owner_label, deadline_at, priority, status, position, updated_at')
+    .select('id, board_id, title, description, owner_label, deadline_at, column_id, priority, status, position, updated_at')
     .single()
 
   if (error) {
@@ -210,11 +401,29 @@ export async function updateTask(
     description: string
     ownerLabel: string
     deadlineAt: string | null
+    columnId: string
     priority: TaskPriority
-    status: TaskStatus
     position: number
   },
 ): Promise<Task> {
+  const { data: taskRow, error: taskError } = await supabase
+    .from('tasks')
+    .select('board_id')
+    .eq('id', taskId)
+    .single()
+
+  if (taskError) {
+    throw taskError
+  }
+
+  const columns = await listBoardColumns((taskRow as { board_id: string }).board_id)
+  const column = columns.find((item) => item.id === input.columnId)
+  if (!column) {
+    throw new Error('Колонка не найдена.')
+  }
+
+  const status = statusFromColumnKey(column.key)
+
   const { data, error } = await supabase
     .from('tasks')
     .update({
@@ -222,12 +431,13 @@ export async function updateTask(
       description: input.description,
       owner_label: input.ownerLabel,
       deadline_at: input.deadlineAt,
+      column_id: input.columnId,
       priority: input.priority,
-      status: input.status,
+      status,
       position: input.position,
     })
     .eq('id', taskId)
-    .select('id, board_id, title, description, owner_label, deadline_at, priority, status, position, updated_at')
+    .select('id, board_id, title, description, owner_label, deadline_at, column_id, priority, status, position, updated_at')
     .single()
 
   if (error) {

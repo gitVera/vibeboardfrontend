@@ -4,27 +4,30 @@ import { IT_TEAM_ROLES } from '../constants/roles'
 import {
   addBoardMember,
   createBoard,
+  createBoardColumn,
   createTask,
   deleteBoard,
+  deleteBoardColumn,
   deleteTask,
+  listBoardColumns,
   listBoardMembers,
   listBoards,
   listTasks,
   removeBoardMember,
   updateBoard,
+  updateBoardColumn,
   updateTask,
 } from '../lib/boardsApi'
 import { listProfiles } from '../lib/profilesApi'
 import { supabase } from '../lib/supabase'
 import {
-  BOARD_COLUMNS,
   type Board,
-  type BoardColumn,
+  type BoardColumnDefinition,
+  type BoardColumnView,
   type BoardMember,
   type Profile,
   type Task,
   type TaskPriority,
-  type TaskStatus,
 } from '../types/boards'
 
 type BoardsPageProps = {
@@ -44,7 +47,11 @@ type TaskFormState = {
   ownerLabel: string
   deadlineAt: string
   priority: TaskPriority
-  status: TaskStatus
+  columnId: string
+}
+
+type ColumnFormState = {
+  title: string
 }
 
 const initialBoardForm: BoardFormState = {
@@ -59,7 +66,11 @@ const initialTaskForm: TaskFormState = {
   ownerLabel: '',
   deadlineAt: '',
   priority: 'medium',
-  status: 'todo',
+  columnId: '',
+}
+
+const initialColumnForm: ColumnFormState = {
+  title: '',
 }
 
 const PRIORITY_LABELS: Record<TaskPriority, string> = {
@@ -147,6 +158,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
   const { boardId: routeBoardId, taskId: routeTaskId } = useParams<{ boardId?: string; taskId?: string }>()
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [boards, setBoards] = useState<Board[]>([])
+  const [boardColumns, setBoardColumns] = useState<BoardColumnDefinition[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setLoading] = useState(true)
   const [isTasksLoading, setTasksLoading] = useState(false)
@@ -163,6 +175,10 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
   const [isTaskCreateOpen, setTaskCreateOpen] = useState(false)
   const [taskDeleteId, setTaskDeleteId] = useState<string | null>(null)
   const [taskForm, setTaskForm] = useState<TaskFormState>(initialTaskForm)
+  const [isColumnCreateOpen, setColumnCreateOpen] = useState(false)
+  const [columnEditId, setColumnEditId] = useState<string | null>(null)
+  const [columnDeleteId, setColumnDeleteId] = useState<string | null>(null)
+  const [columnForm, setColumnForm] = useState<ColumnFormState>(initialColumnForm)
 
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [boardMembers, setBoardMembers] = useState<BoardMember[]>([])
@@ -171,7 +187,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
   const [memberRoleFilter, setMemberRoleFilter] = useState('')
   const [selectedUserToAdd, setSelectedUserToAdd] = useState('')
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
-  const [dragOverColumnId, setDragOverColumnId] = useState<TaskStatus | null>(null)
+  const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null)
 
   const selectedBoard = useMemo(() => boards.find((board) => board.id === routeBoardId) ?? null, [boards, routeBoardId])
   const selectedBoardId = selectedBoard?.id ?? null
@@ -182,16 +198,34 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
   const selectedTask = useMemo(() => tasks.find((task) => task.id === routeTaskId) ?? null, [tasks, routeTaskId])
   const taskDelete = useMemo(() => tasks.find((task) => task.id === taskDeleteId) ?? null, [tasks, taskDeleteId])
 
-  const columns: BoardColumn[] = useMemo(
+  const todoColumnId = useMemo(
+    () => boardColumns.find((column) => column.key === 'todo')?.id ?? boardColumns[0]?.id ?? '',
+    [boardColumns],
+  )
+
+  const columns: BoardColumnView[] = useMemo(
     () =>
-      BOARD_COLUMNS.map((column) => ({
+      boardColumns.map((column) => ({
         id: column.id,
+        key: column.key,
         title: column.title,
+        position: column.position,
+        isSystem: column.isSystem,
         tasks: tasks
-          .filter((task) => task.status === column.id)
+          .filter((task) => task.columnId === column.id)
           .sort((a, b) => a.position - b.position),
       })),
-    [tasks],
+    [boardColumns, tasks],
+  )
+
+  const columnEdit = useMemo(
+    () => boardColumns.find((column) => column.id === columnEditId) ?? null,
+    [boardColumns, columnEditId],
+  )
+
+  const columnDelete = useMemo(
+    () => boardColumns.find((column) => column.id === columnDeleteId) ?? null,
+    [boardColumns, columnDeleteId],
   )
 
   const availableProfiles = useMemo(() => {
@@ -246,6 +280,10 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
     setTaskForm((prev) => ({ ...prev, [field]: value }))
   }
 
+  const setColumnField = (field: keyof ColumnFormState, value: string) => {
+    setColumnForm((prev) => ({ ...prev, [field]: value }))
+  }
+
   const closeAllModals = () => {
     setBoardCreateOpen(false)
     setBoardViewId(null)
@@ -253,17 +291,22 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
     setBoardDeleteId(null)
     setTaskCreateOpen(false)
     setTaskDeleteId(null)
+    setColumnCreateOpen(false)
+    setColumnEditId(null)
+    setColumnDeleteId(null)
     setBoardForm(initialBoardForm)
     setTaskForm(initialTaskForm)
+    setColumnForm(initialColumnForm)
   }
 
-  const loadTasksForBoard = async (boardId: string) => {
+  const loadBoardDataForBoard = async (boardId: string) => {
     const requestId = ++tasksRequestIdRef.current
     setTasksLoading(true)
     try {
-      const data = await listTasks(boardId)
+      const [loadedColumns, loadedTasks] = await Promise.all([listBoardColumns(boardId), listTasks(boardId)])
       if (tasksRequestIdRef.current === requestId) {
-        setTasks(data)
+        setBoardColumns(loadedColumns)
+        setTasks(loadedTasks)
       }
     } finally {
       if (tasksRequestIdRef.current === requestId) {
@@ -283,6 +326,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
       if (!user) {
         setCurrentUserId(null)
         setBoards([])
+        setBoardColumns([])
         setTasks([])
         return
       }
@@ -303,11 +347,12 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
 
   useEffect(() => {
     if (!routeBoardId) {
+      setBoardColumns([])
       setTasks([])
       setTasksLoading(false)
       return
     }
-    void loadTasksForBoard(routeBoardId).catch((error) => {
+    void loadBoardDataForBoard(routeBoardId).catch((error) => {
       setErrorMessage(error instanceof Error ? error.message : 'Не удалось загрузить задачи.')
       setTasksLoading(false)
     })
@@ -347,7 +392,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
       ownerLabel: selectedTask.ownerLabel,
       deadlineAt: selectedTask.deadlineAt ?? '',
       priority: selectedTask.priority,
-      status: selectedTask.status,
+      columnId: selectedTask.columnId,
     })
   }, [isTaskEditPage, selectedTask])
 
@@ -375,13 +420,30 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
     setBoardEditId(board.id)
   }
 
-  const openCreateTask = (status: TaskStatus) => {
+  const openCreateTask = (columnId: string) => {
     setTaskForm({
       ...initialTaskForm,
       ownerLabel: '',
-      status,
+      columnId,
     })
     setTaskCreateOpen(true)
+  }
+
+  const openCreateColumn = () => {
+    setColumnForm(initialColumnForm)
+    setColumnCreateOpen(true)
+  }
+
+  const openEditColumn = (column: Pick<BoardColumnDefinition, 'id' | 'title'>) => {
+    setColumnForm({ title: column.title })
+    setColumnEditId(column.id)
+  }
+
+  const handleColumnTitleClick = (column: BoardColumnView) => {
+    if (!currentUserId) {
+      return
+    }
+    openEditColumn(column)
   }
 
   const openTaskPage = (task: Task) => {
@@ -475,7 +537,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
     const ownerLabel = taskForm.ownerLabel.trim()
     if (!title) return
 
-    const position = tasks.filter((task) => task.status === taskForm.status).length
+    const position = tasks.filter((task) => task.columnId === taskForm.columnId).length
     setSaving(true)
     setErrorMessage(null)
     try {
@@ -485,11 +547,11 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
         description: taskForm.description.trim(),
         ownerLabel,
         deadlineAt: taskForm.deadlineAt || null,
+        columnId: taskForm.columnId,
         priority: taskForm.priority,
-        status: taskForm.status,
         position,
       })
-      await loadTasksForBoard(selectedBoardId)
+      await loadBoardDataForBoard(selectedBoardId)
       closeAllModals()
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Не удалось создать задачу.')
@@ -506,7 +568,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
     const ownerLabel = taskForm.ownerLabel.trim()
     if (!title) return
 
-    const position = tasks.filter((task) => task.id !== selectedTask.id && task.status === taskForm.status).length
+    const position = tasks.filter((task) => task.id !== selectedTask.id && task.columnId === taskForm.columnId).length
     setSaving(true)
     setErrorMessage(null)
     try {
@@ -515,11 +577,11 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
         description: taskForm.description.trim(),
         ownerLabel,
         deadlineAt: taskForm.deadlineAt || null,
+        columnId: taskForm.columnId,
         priority: taskForm.priority,
-        status: taskForm.status,
         position,
       })
-      await loadTasksForBoard(selectedBoardId)
+      await loadBoardDataForBoard(selectedBoardId)
       navigate(`/boards/${selectedBoardId}/tasks/${selectedTask.id}`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Не удалось изменить задачу.')
@@ -534,7 +596,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
     setErrorMessage(null)
     try {
       await deleteTask(taskDelete.id)
-      await loadTasksForBoard(selectedBoardId)
+      await loadBoardDataForBoard(selectedBoardId)
       closeAllModals()
       if (routeTaskId === taskDelete.id) {
         navigate(`/boards/${selectedBoardId}`)
@@ -581,6 +643,72 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
     }
   }
 
+  const handleCreateColumn = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!selectedBoardId) {
+      return
+    }
+
+    const title = columnForm.title.trim()
+    if (!title) {
+      return
+    }
+
+    setSaving(true)
+    setErrorMessage(null)
+    try {
+      await createBoardColumn(selectedBoardId, title)
+      await loadBoardDataForBoard(selectedBoardId)
+      closeAllModals()
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Не удалось создать колонку.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEditColumn = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!columnEdit || !selectedBoardId) {
+      return
+    }
+
+    const title = columnForm.title.trim()
+    if (!title) {
+      return
+    }
+
+    setSaving(true)
+    setErrorMessage(null)
+    try {
+      await updateBoardColumn(columnEdit.id, title)
+      await loadBoardDataForBoard(selectedBoardId)
+      closeAllModals()
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Не удалось переименовать колонку.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteColumn = async () => {
+    if (!columnDelete || !selectedBoardId) {
+      return
+    }
+
+    setSaving(true)
+    setErrorMessage(null)
+    try {
+      await deleteBoardColumn(selectedBoardId, columnDelete.id)
+      await loadBoardDataForBoard(selectedBoardId)
+      closeAllModals()
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Не удалось удалить колонку.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleTaskDragStart = (taskId: string) => {
     if (!currentUserId) {
       return
@@ -593,7 +721,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
     setDragOverColumnId(null)
   }
 
-  const handleColumnDragOver = (event: DragEvent<HTMLElement>, columnId: TaskStatus) => {
+  const handleColumnDragOver = (event: DragEvent<HTMLElement>, columnId: string) => {
     if (!currentUserId || !draggedTaskId) {
       return
     }
@@ -601,14 +729,14 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
     setDragOverColumnId(columnId)
   }
 
-  const handleColumnDragLeave = (event: DragEvent<HTMLElement>, columnId: TaskStatus) => {
+  const handleColumnDragLeave = (event: DragEvent<HTMLElement>, columnId: string) => {
     if (event.target !== event.currentTarget) {
       return
     }
     setDragOverColumnId((prev) => (prev === columnId ? null : prev))
   }
 
-  const handleColumnDrop = async (event: DragEvent<HTMLElement>, targetColumnId: TaskStatus) => {
+  const handleColumnDrop = async (event: DragEvent<HTMLElement>, targetColumnId: string) => {
     event.preventDefault()
     setDragOverColumnId(null)
 
@@ -620,11 +748,11 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
     const task = tasks.find((item) => item.id === draggedTaskId)
     setDraggedTaskId(null)
 
-    if (!task || task.status === targetColumnId) {
+    if (!task || task.columnId === targetColumnId) {
       return
     }
 
-    const position = tasks.filter((item) => item.status === targetColumnId).length
+    const position = tasks.filter((item) => item.columnId === targetColumnId).length
     setSaving(true)
     setErrorMessage(null)
     try {
@@ -633,11 +761,11 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
         description: task.description,
         ownerLabel: task.ownerLabel,
         deadlineAt: task.deadlineAt,
+        columnId: targetColumnId,
         priority: task.priority,
-        status: targetColumnId,
         position,
       })
-      await loadTasksForBoard(selectedBoardId)
+      await loadBoardDataForBoard(selectedBoardId)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Не удалось переместить задачу.')
     } finally {
@@ -668,8 +796,8 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
           ) : null}
           <button
             type="button"
-            onClick={() => openCreateTask('todo')}
-            disabled={!selectedBoard || !currentUserId}
+            onClick={() => openCreateTask(todoColumnId)}
+            disabled={!selectedBoard || !currentUserId || !todoColumnId}
             className="rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
             + Новая задача
@@ -803,7 +931,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-xl border border-rose-200 bg-white p-3">
                     <p className="text-xs text-slate-500">Колонка</p>
-                    <p className="mt-1 text-sm text-slate-900">{BOARD_COLUMNS.find((column) => column.id === selectedTask.status)?.title}</p>
+                    <p className="mt-1 text-sm text-slate-900">{boardColumns.find((column) => column.id === selectedTask.columnId)?.title ?? '—'}</p>
                   </div>
                   <div className="rounded-xl border border-rose-200 bg-white p-3">
                     <p className="text-xs text-slate-500">Исполнитель</p>
@@ -852,8 +980,8 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
                     </select>
                   </label>
                   <label className="block text-sm text-slate-700">Колонка
-                    <select value={taskForm.status} onChange={(event) => setTaskField('status', event.target.value as TaskStatus)} className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none">
-                      {BOARD_COLUMNS.map((column) => (
+                    <select value={taskForm.columnId} onChange={(event) => setTaskField('columnId', event.target.value)} className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none">
+                      {boardColumns.map((column) => (
                         <option key={column.id} value={column.id} className="bg-white text-slate-800">{column.title}</option>
                       ))}
                     </select>
@@ -980,9 +1108,25 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
               )}
             </section>
 
-            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold text-slate-900">Колонки задач</h2>
+              <button
+                type="button"
+                onClick={openCreateColumn}
+                disabled={!currentUserId || !selectedBoard}
+                className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-sm text-slate-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                + Колонка
+              </button>
+            </div>
+
+            <div className="overflow-x-auto pb-2">
+            <div
+              className="grid min-w-max gap-4"
+              style={{ gridTemplateColumns: `repeat(${Math.max(columns.length, 1)}, minmax(240px, 1fr))` }}
+            >
             {isTasksLoading ? (
-              <div className="lg:col-span-3 rounded-xl border border-rose-200 bg-white/90 px-4 py-5 text-sm text-slate-600">
+              <div className="rounded-xl border border-rose-200 bg-white/90 px-4 py-5 text-sm text-slate-600">
                 Загружаем задачи выбранной доски...
               </div>
             ) : null}
@@ -998,15 +1142,23 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
                 onDragLeave={(event) => handleColumnDragLeave(event, column.id)}
                 onDrop={(event) => void handleColumnDrop(event, column.id)}
               >
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="font-semibold text-slate-900">{column.title}</h2>
-                  <div className="flex items-center gap-2">
+                <div className="mb-4 flex items-start justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleColumnTitleClick(column)}
+                    disabled={!currentUserId}
+                    className="text-left font-semibold text-slate-900 transition hover:text-pink-700 disabled:cursor-default disabled:hover:text-slate-900"
+                    title={currentUserId ? 'Изменить или удалить колонку' : undefined}
+                  >
+                    {column.title}
+                  </button>
+                  <div className="flex flex-wrap items-center justify-end gap-1">
                     <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs text-slate-600">{column.tasks.length}</span>
                     <button
                       type="button"
                       onClick={() => openCreateTask(column.id)}
                       disabled={!currentUserId || !selectedBoard}
-                      className="rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs text-slate-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] text-slate-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       + Задача
                     </button>
@@ -1045,6 +1197,7 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
                 </div>
               </section>
             ))}
+            </div>
             </div>
           </>
         )
@@ -1107,8 +1260,8 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
                   </select>
                 </label>
                 <label className="block text-sm text-slate-700">Колонка
-                  <select value={taskForm.status} onChange={(event) => setTaskField('status', event.target.value as TaskStatus)} className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none">
-                    {BOARD_COLUMNS.map((column) => (
+                  <select value={taskForm.columnId} onChange={(event) => setTaskField('columnId', event.target.value)} className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none">
+                    {boardColumns.map((column) => (
                       <option key={column.id} value={column.id} className="bg-white text-slate-800">{column.title}</option>
                     ))}
                   </select>
@@ -1169,6 +1322,51 @@ export function BoardsPage({ userName, userRole }: BoardsPageProps) {
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={closeAllModals} className="rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm text-slate-700 transition hover:bg-rose-100">Отмена</button>
               <button type="button" onClick={handleDeleteTask} disabled={isSaving} className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60">Удалить</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isColumnCreateOpen || columnEdit ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 px-4 backdrop-blur-sm" onClick={closeAllModals}>
+          <div className="w-full max-w-md rounded-2xl border border-rose-200 bg-rose-50/95 p-6 shadow-2xl shadow-pink-200/50" onClick={(event) => event.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-900">{columnEdit ? 'Переименовать колонку' : 'Новая колонка'}</h3>
+            <form className="mt-4 space-y-4" onSubmit={columnEdit ? handleEditColumn : handleCreateColumn}>
+              <label className="block text-sm text-slate-700">Название колонки
+                <input type="text" value={columnForm.title} onChange={(event) => setColumnField('title', event.target.value)} required className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-slate-800 focus:border-pink-400 focus:outline-none" />
+              </label>
+              <div className="flex justify-end gap-2">
+                {columnEdit && !(columnEdit.isSystem && columnEdit.key === 'todo') ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setColumnDeleteId(columnEdit.id)
+                      setColumnEditId(null)
+                    }}
+                    disabled={isSaving}
+                    className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Удалить
+                  </button>
+                ) : null}
+                <button type="button" onClick={closeAllModals} className="rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm text-slate-700 transition hover:bg-rose-100">Отмена</button>
+                <button type="submit" disabled={isSaving} className="rounded-lg bg-gradient-to-r from-fuchsia-500 to-pink-500 px-4 py-2 text-sm font-medium text-white transition hover:from-fuchsia-400 hover:to-pink-400 disabled:cursor-not-allowed disabled:opacity-60">{columnEdit ? 'Сохранить' : 'Создать'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {columnDelete ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 px-4 backdrop-blur-sm" onClick={closeAllModals}>
+          <div className="w-full max-w-md rounded-2xl border border-rose-200 bg-rose-50/95 p-6 shadow-2xl shadow-pink-200/50" onClick={(event) => event.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-900">Удалить колонку?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Колонка <span className="font-medium text-slate-900">{columnDelete.title}</span> будет удалена. Все её задачи будут перенесены в To Do.
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={closeAllModals} className="rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm text-slate-700 transition hover:bg-rose-100">Отмена</button>
+              <button type="button" onClick={() => void handleDeleteColumn()} disabled={isSaving} className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60">Удалить</button>
             </div>
           </div>
         </div>
